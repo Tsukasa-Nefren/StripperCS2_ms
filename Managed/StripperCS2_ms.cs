@@ -27,8 +27,6 @@ namespace StripperCS2_ms_adapter
         private readonly ILogger<StripperCS2_ms> _log;
         private INativeDetourHook? _hook;
 
-        private static unsafe delegate* unmanaged<nint, nint, nint> _trampoline;
-
         public StripperCS2_ms(ISharedSystem sharedSystem,
                               string? dllPath,
                               string? sharpPath,
@@ -36,24 +34,22 @@ namespace StripperCS2_ms_adapter
                               IConfiguration? coreConfig,
                               bool hotReload)
         {
-            _log = sharedSystem.GetLoggerFactory().CreateLogger<StripperCS2_ms>();
+            _log = sharedSystem.GetLoggerFactory().CreateLogger<StripipperCS2_ms>();
         }
 
         public bool Init()
         {
-            // If you can resolve your game dir here, pass it; adapter tolerates empty.
             Native.SC2_Init("");
             return true;
         }
 
         public void PostInit()
         {
+            // Install detour via native bridge using a raw function pointer (no generics)
             unsafe
             {
-                // Use native bridge to hook by gamedata key (requires adapter to provide ms_bridge_* entrypoints).
-                if (!InterfaceBridge.TryHook("IWorldRendererMgr::CreateWorldInternal",
-                                             (delegate* unmanaged<nint, nint, nint>)&Detour_CreateWorldInternal,
-                                             out var hook))
+                nint fnPtr = (nint)(delegate* unmanaged<nint, nint, nint>)&Detour_CreateWorldInternal;
+                if (!InterfaceBridge.TryHookFnPtr("IWorldRendererMgr::CreateWorldInternal", fnPtr, out var hook))
                 {
                     _log.LogWarning("TryHook(CreateWorldInternal) failed; detour not installed.");
                     return;
@@ -76,16 +72,15 @@ namespace StripperCS2_ms_adapter
 
         public void OnLevelInit(string mapName)
         {
-            // If you know the game directory at runtime, pass it here.
             Native.SC2_OnLevelInit(mapName, "");
         }
 
         [System.Runtime.InteropServices.UnmanagedCallersOnly]
         private static nint Detour_CreateWorldInternal(nint pThis, nint pSingleWorldRep)
         {
-            var ret = _trampoline is not null ? _trampoline(pThis, pSingleWorldRep) : 0;
-            Native.SC2_OnWorldCreated(pSingleWorldRep);
-            return ret;
+            // NOTE: Native layer should either call us post-call or manage the trampoline itself.
+            try { Native.SC2_OnWorldCreated(pSingleWorldRep); } catch { }
+            return 0;
         }
     }
 }
