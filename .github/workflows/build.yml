@@ -1,11 +1,9 @@
 name: build
-
 on:
   push:
     branches: ["**"]
     tags: ["v*"]
   pull_request:
-
 jobs:
   windows:
     runs-on: windows-latest
@@ -13,138 +11,65 @@ jobs:
       run:
         shell: pwsh
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           submodules: recursive
-
-      - name: Setup .NET (9.0)
-        uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '9.0.x'
-
-      - name: NuGet cache
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.nuget/packages
-          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj') }}
-          restore-keys: |
-            nuget-${{ runner.os }}-
-
-      - name: Build Managed module (Release)
-        run: |
-          dotnet restore ./Managed/StripperCS2_ms.csproj
-          dotnet build ./Managed/StripperCS2_ms.csproj -c Release --no-restore
-
-      # 네이티브(CMake) 구성: CMakeLists.txt가 있을 때만 실행
-      - name: Configure (CMake - VS2022 x64)
+          dotnet-version: "9.0.x"
+      - name: Publish Managed
+        run: dotnet publish ./Managed/StripperCS2_ms.csproj -c Release -f net9.0 -o out_win
+      - name: Configure CMake
         if: ${{ hashFiles('CMakeLists.txt') != '' }}
         run: cmake -S . -B build -G "Visual Studio 17 2022" -A x64
-
-      - name: Build native adapter (Release)
+      - name: Build Native
         if: ${{ hashFiles('CMakeLists.txt') != '' }}
         run: cmake --build build --config Release --target StripperCS2_ms_adapter
-
-      - name: Collect artifacts (Windows)
+      - name: Stage module folder
         run: |
-          New-Item -ItemType Directory -Force -Path artifacts | Out-Null
-
-          # Managed DLL 자동 탐색 (net7/net8/net9 모두 대응)
-          $managed = Get-ChildItem -Path "./Managed/bin/Release" -Recurse -Filter "StripperCS2_ms.dll" | Select-Object -First 1
-          if (-not $managed) {
-            Write-Host "Managed/bin/Release contents:"
-            Get-ChildItem "./Managed/bin/Release" -Recurse | Select-Object FullName | Format-Table
-            throw "Managed DLL not found under ./Managed/bin/Release"
-          }
-          Copy-Item $managed.FullName artifacts/
-
-          # Native DLL (VS 제너레이터 기본 경로)
-          if (Test-Path ./build/Release/StripperCS2_ms_adapter.dll) {
-            Copy-Item ./build/Release/StripperCS2_ms_adapter.dll artifacts/
-          } elseif (Test-Path ./build/StripperCS2_ms_adapter.dll) {
-            Copy-Item ./build/StripperCS2_ms_adapter.dll artifacts/
-          }
-
-          # Gamedata (json/jsonc 둘 다 대응)
-          if (Test-Path ./Gamedata/StripperCS2_ms.games.json) {
-            Copy-Item ./Gamedata/StripperCS2_ms.games.json artifacts/
-          } elseif (Test-Path ./Gamedata/StripperCS2_ms.games.jsonc) {
-            Copy-Item ./Gamedata/StripperCS2_ms.games.jsonc artifacts/
-          }
-
-      - name: Upload artifacts (Windows)
-        uses: actions/upload-artifact@v4
+          New-Item -ItemType Directory -Force -Path artifacts/StripperCS2_ms | Out-Null
+          Copy-Item out_win/StripperCS2_ms.dll artifacts/StripperCS2_ms/
+          Copy-Item out_win/StripperCS2_ms.deps.json artifacts/StripperCS2_ms/
+          if (Test-Path out_win/StripperCS2_ms.runtimeconfig.json) { Copy-Item out_win/StripperCS2_ms.runtimeconfig.json artifacts/StripperCS2_ms/ }
+          if (Test-Path ./build/Release/StripperCS2_ms_adapter.dll) { Copy-Item ./build/Release/StripperCS2_ms_adapter.dll artifacts/StripperCS2_ms/ }
+          elseif (Test-Path ./build/StripperCS2_ms_adapter.dll) { Copy-Item ./build/StripperCS2_ms_adapter.dll artifacts/StripperCS2_ms/ }
+          if (Test-Path ./Gamedata/StripperCS2_ms.games.json) { New-Item -ItemType Directory -Force -Path artifacts/gamedata | Out-Null; Copy-Item ./Gamedata/StripperCS2_ms.games.json artifacts/gamedata/ }
+      - uses: actions/upload-artifact@v4
         with:
-          name: StripperCS2_ms-win64
-          path: artifacts/*
-
+          name: StripperCS2_ms-module-win64
+          path: artifacts/**
   linux:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           submodules: recursive
-
-      - name: Setup .NET (9.0)
-        uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '9.0.x'
-
-      - name: NuGet cache
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.nuget/packages
-          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj') }}
-          restore-keys: |
-            nuget-${{ runner.os }}-
-
-      - name: Build Managed module (Release)
-        run: |
-          dotnet restore ./Managed/StripperCS2_ms.csproj
-          dotnet build ./Managed/StripperCS2_ms.csproj -c Release --no-restore
-
-      # 네이티브(CMake) 구성/빌드: CMakeLists.txt가 있을 때만 실행
+          dotnet-version: "9.0.x"
+      - name: Publish Managed
+        run: dotnet publish ./Managed/StripperCS2_ms.csproj -c Release -f net9.0 -o out_linux
       - name: Install build deps
         if: ${{ hashFiles('CMakeLists.txt') != '' }}
         run: |
           sudo apt-get update
           sudo apt-get install -y cmake ninja-build build-essential
-
-      - name: Configure (CMake - Ninja Release)
+      - name: Configure CMake
         if: ${{ hashFiles('CMakeLists.txt') != '' }}
         run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
-
-      - name: Build native adapter (Release)
+      - name: Build Native
         if: ${{ hashFiles('CMakeLists.txt') != '' }}
         run: cmake --build build --target StripperCS2_ms_adapter
-
-      - name: Collect artifacts (Linux)
+      - name: Stage module folder
         run: |
           set -e
-          mkdir -p artifacts
-
-          # Managed DLL 자동 탐색
-          MANAGED=$(find ./Managed/bin/Release -type f -name "StripperCS2_ms.dll" | head -n 1)
-          if [ -z "$MANAGED" ]; then
-            echo "Managed/bin/Release contents:"
-            find ./Managed/bin/Release -maxdepth 4 -type f -printf "  %p\n" || true
-            echo "Managed DLL not found under ./Managed/bin/Release" >&2
-            exit 1
-          fi
-          cp "$MANAGED" artifacts/
-
-          # Native SO (있으면 복사: Ninja 기본 경로)
-          [ -f ./build/libStripperCS2_ms_adapter.so ] && cp ./build/libStripperCS2_ms_adapter.so artifacts/ || true
-
-          # Gamedata (json/jsonc 둘 다 대응)
-          [ -f ./Gamedata/StripperCS2_ms.games.json ] && cp ./Gamedata/StripperCS2_ms.games.json artifacts/ || true
-          [ -f ./Gamedata/StripperCS2_ms.games.jsonc ] && cp ./Gamedata/StripperCS2_ms.games.jsonc artifacts/ || true
-
-      - name: Upload artifacts (Linux)
-        uses: actions/upload-artifact@v4
+          mkdir -p artifacts/StripperCS2_ms
+          cp out_linux/StripperCS2_ms.dll artifacts/StripperCS2_ms/
+          cp out_linux/StripperCS2_ms.deps.json artifacts/StripperCS2_ms/
+          [ -f out_linux/StripperCS2_ms.runtimeconfig.json ] && cp out_linux/StripperCS2_ms.runtimeconfig.json artifacts/StripperCS2_ms/ || true
+          [ -f ./build/libStripperCS2_ms_adapter.so ] && cp ./build/libStripperCS2_ms_adapter.so artifacts/StripperCS2_ms/ || true
+          [ -f ./Gamedata/StripperCS2_ms.games.json ] && mkdir -p artifacts/gamedata && cp ./Gamedata/StripperCS2_ms.games.json artifacts/gamedata/ || true
+      - uses: actions/upload-artifact@v4
         with:
-          name: StripperCS2_ms-linux64
-          path: artifacts/*
+          name: StripperCS2_ms-module-linux64
+          path: artifacts/**
