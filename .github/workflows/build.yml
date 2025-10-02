@@ -1,0 +1,55 @@
+name: build
+on:
+  push:
+    branches: ["**"]
+    tags: ["v*"]
+  pull_request:
+jobs:
+  windows-native-and-dotnet:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 7.0.x
+      - run: dotnet build ./Managed/StripperCS2_ms.csproj -c Release
+      - run: cmake -S . -B build -G "Visual Studio 17 2022" -A x64
+      - run: cmake --build build --config Release --target StripperCS2_ms_adapter
+      - run: |
+          New-Item -ItemType Directory -Force -Path artifacts | Out-Null
+          Copy-Item ./Managed/bin/Release/net7.0/StripperCS2_ms.dll artifacts/
+          Copy-Item ./build/Release/StripperCS2_ms_adapter.dll artifacts/
+          if (Test-Path ./Gamedata/StripperCS2_ms.games.json) { Copy-Item ./Gamedata/StripperCS2_ms.games.json artifacts/ }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: StripperCS2_ms-win64
+          path: artifacts/*
+  linux-native-and-dotnet:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 7.0.x
+      - run: dotnet build ./Managed/StripperCS2_ms.csproj -c Release
+      - run: sudo apt-get update
+      - run: sudo apt-get install -y cmake ninja-build build-essential
+      - run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+      - run: cmake --build build --target StripperCS2_ms_adapter
+      - run: |
+          mkdir -p artifacts
+          cp ./Managed/bin/Release/net7.0/StripperCS2_ms.dll artifacts/
+          cp ./build/libStripperCS2_ms_adapter.so artifacts/ || true
+          [ -f ./Gamedata/StripperCS2_ms.games.json ] && cp ./Gamedata/StripperCS2_ms.games.json artifacts/ || true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: StripperCS2_ms-linux64
+          path: artifacts/*
+
