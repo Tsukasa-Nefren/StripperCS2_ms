@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Runtime.InteropServices;
 using Microsoft.Extensions.Logging;
 using Sharp.Shared;
@@ -17,25 +18,23 @@ namespace StripperCS2_ms_adapter
 
     public sealed class StripperCS2_ms : IModSharpModule
     {
-        public string DisplayName   => "StripperCS2_ms";
+        public string DisplayName => "StripperCS2_ms";
         public string DisplayAuthor => "you";
 
-        private readonly ILogger<StripperCS2_ms> _log;
-        private INativeDetourHook? _hook;
+        readonly ILogger<StripperCS2_ms> _log;
+        readonly string _moduleDir;
+        INativeDetourHook? _hook;
 
-        public StripperCS2_ms(ISharedSystem sharedSystem,
-                              string? dllPath,
-                              string? sharpPath,
-                              Version? version,
-                              IConfiguration? coreConfig,
-                              bool hotReload)
+        public StripperCS2_ms(ISharedSystem sharedSystem, string? dllPath, string? sharpPath, Version? version, IConfiguration? coreConfig, bool hotReload)
         {
             _log = sharedSystem.GetLoggerFactory().CreateLogger<StripperCS2_ms>();
+            _moduleDir = Path.GetDirectoryName(dllPath ?? typeof(StripperCS2_ms).Assembly.Location) ?? AppContext.BaseDirectory;
         }
 
         public bool Init()
         {
-            Native.SC2_Init("");
+            NativeLoader.EnsureLoaded(_moduleDir);
+            Native.SC2_Init(_moduleDir);
             return true;
         }
 
@@ -44,13 +43,8 @@ namespace StripperCS2_ms_adapter
             unsafe
             {
                 nint fnPtr = (nint)(delegate* unmanaged<nint, nint, nint>)&Detour_CreateWorldInternal;
-                if (!InterfaceBridge.TryHookFnPtr("IWorldRendererMgr::CreateWorldInternal", fnPtr, out var hook))
-                {
-                    _log.LogWarning("TryHook(CreateWorldInternal) failed; detour not installed.");
-                    return;
-                }
+                if (!InterfaceBridge.TryHookFnPtr("IWorldRendererMgr::CreateWorldInternal", fnPtr, out var hook)) return;
                 _hook = hook;
-                _log.LogInformation("Installed detour: CreateWorldInternal");
             }
         }
 
@@ -67,11 +61,11 @@ namespace StripperCS2_ms_adapter
 
         public void OnLevelInit(string mapName)
         {
-            Native.SC2_OnLevelInit(mapName, "");
+            Native.SC2_OnLevelInit(mapName, _moduleDir);
         }
 
         [UnmanagedCallersOnly]
-        private static nint Detour_CreateWorldInternal(nint pThis, nint pSingleWorldRep)
+        static nint Detour_CreateWorldInternal(nint pThis, nint pSingleWorldRep)
         {
             try { Native.SC2_OnWorldCreated(pSingleWorldRep); } catch { }
             return 0;
