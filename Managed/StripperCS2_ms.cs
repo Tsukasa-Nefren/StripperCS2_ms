@@ -8,15 +8,11 @@ namespace StripperCS2_ms_adapter
 {
     internal static class Native
     {
-#if WINDOWS
-        const string LIB = "StripperCS2_ms_adapter.dll";
-#else
-        const string LIB = "libStripperCS2_ms_adapter.so";
-#endif
-        [DllImport(LIB, CallingConvention = CallingConvention.Cdecl)] internal static extern void SC2_Init(string gameDir);
-        [DllImport(LIB, CallingConvention = CallingConvention.Cdecl)] internal static extern void SC2_OnLevelInit(string mapName, string gameDir);
-        [DllImport(LIB, CallingConvention = CallingConvention.Cdecl)] internal static extern void SC2_OnLevelShutdown();
-        [DllImport(LIB, CallingConvention = CallingConvention.Cdecl)] internal static extern void SC2_OnWorldCreated(nint singleWorldRep);
+        [DllImport("StripperCS2_ms_adapter", CallingConvention = CallingConvention.Cdecl)] internal static extern void SC2_Init(string gameDir);
+        [DllImport("StripperCS2_ms_adapter", CallingConvention = CallingConvention.Cdecl)] internal static extern void SC2_OnLevelInit(string mapName, string gameDir);
+        [DllImport("StripperCS2_ms_adapter", CallingConvention = CallingConvention.Cdecl)] internal static extern void SC2_OnLevelShutdown();
+        [DllImport("StripperCS2_ms_adapter", CallingConvention = CallingConvention.Cdecl)] internal static extern void SC2_OnWorldCreated(nint singleWorldRep);
+        static Native() { _ = typeof(NativeLoader); }
     }
 
     public sealed class StripperCS2_ms : IModSharpModule
