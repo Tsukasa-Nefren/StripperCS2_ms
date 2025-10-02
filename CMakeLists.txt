@@ -2,12 +2,10 @@ cmake_minimum_required(VERSION 3.20)
 project(StripperCS2_ms_adapter CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
-
-add_library(StripperCS2_ms_adapter SHARED
-  src/bridge/bridge_api.cpp
-)
-
+if (MSVC)
+  set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+endif()
+add_library(StripperCS2_ms_adapter SHARED src/bridge/bridge_api.cpp)
 if (MSVC)
   target_compile_definitions(StripperCS2_ms_adapter PRIVATE _CRT_SECURE_NO_WARNINGS WIN32_LEAN_AND_MEAN _WIN32)
   add_definitions(/bigobj)
