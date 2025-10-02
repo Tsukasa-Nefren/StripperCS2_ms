@@ -34,7 +34,7 @@ namespace StripperCS2_ms_adapter
                               IConfiguration? coreConfig,
                               bool hotReload)
         {
-            _log = sharedSystem.GetLoggerFactory().CreateLogger<StripipperCS2_ms>();
+            _log = sharedSystem.GetLoggerFactory().CreateLogger<StripperCS2_ms>();
         }
 
         public bool Init()
@@ -45,7 +45,6 @@ namespace StripperCS2_ms_adapter
 
         public void PostInit()
         {
-            // Install detour via native bridge using a raw function pointer (no generics)
             unsafe
             {
                 nint fnPtr = (nint)(delegate* unmanaged<nint, nint, nint>)&Detour_CreateWorldInternal;
@@ -75,10 +74,9 @@ namespace StripperCS2_ms_adapter
             Native.SC2_OnLevelInit(mapName, "");
         }
 
-        [System.Runtime.InteropServices.UnmanagedCallersOnly]
+        [UnmanagedCallersOnly]
         private static nint Detour_CreateWorldInternal(nint pThis, nint pSingleWorldRep)
         {
-            // NOTE: Native layer should either call us post-call or manage the trampoline itself.
             try { Native.SC2_OnWorldCreated(pSingleWorldRep); } catch { }
             return 0;
         }
